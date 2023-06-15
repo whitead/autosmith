@@ -1,0 +1,4 @@
+pytest
+pre-commit
+build
+numpy
