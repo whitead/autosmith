@@ -1,10 +1,9 @@
 import ast
+import importlib.metadata
 import inspect
 import sys
 import textwrap
-from typing import Callable, Dict, List, Set, Tuple, Union, cast
-
-import importlib_metadata
+from typing import Callable, Dict, List, Mapping, Set, Tuple, Union, cast
 
 
 def get_imports(source: str) -> Tuple[Dict[str, str], Set[str]]:
@@ -31,7 +30,7 @@ def get_func_imports(func: Union[Callable, str]) -> List[str]:
     """Get the imports necessary to run a function - either present in module or body"""
     module_imports: Dict[str, str] = dict()
     module_wildcards: Set[str] = set()
-    source: str = ""
+    source: str
     if isinstance(func, str):
         source = textwrap.dedent(func)
     else:
@@ -54,13 +53,13 @@ def get_func_imports(func: Union[Callable, str]) -> List[str]:
 
 def get_requirements_from_imports(imports: List[str]) -> str:
     """Get the PyPI package name and versions for a list of imports as requirements.txt"""
-    packages: dict = importlib_metadata.packages_distributions()
+    packages: Mapping[str, List[str]] = importlib.metadata.packages_distributions()
     pypi_names: List[str] = []
     for module in imports:
         if module in packages:
             # Use the first element of the list as the distribution name
             dist: str = packages[module][0]
-            version: str = importlib_metadata.version(dist)
+            version: str = importlib.metadata.version(dist)
             specifier: str = f"{dist}=={version}"
             pypi_names.append(specifier)
     return "\n".join(pypi_names)
