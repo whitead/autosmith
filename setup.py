@@ -16,7 +16,7 @@ setup(
     url="https://github.com/whitead/autosmith",
     license="Apache 2.0",
     packages=["autosmith"],
-    install_requires=["pkg_resources"],
+    install_requires=[],
     test_suite="tests",
     long_description=long_description,
     long_description_content_type="text/markdown",
