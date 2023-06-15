@@ -2,7 +2,7 @@ import ast
 import inspect
 import sys
 import textwrap
-from typing import Callable, Dict, List, Set, Tuple, cast
+from typing import Callable, Dict, List, Set, Tuple, Union, cast
 
 import importlib_metadata
 
@@ -27,12 +27,20 @@ def get_imports(source: str) -> Tuple[Dict[str, str], Set[str]]:
     return imports, wildcards
 
 
-def get_func_imports(func: Callable) -> List[str]:
+def get_func_imports(func: Union[Callable, str]) -> List[str]:
     """Get the imports necessary to run a function - either present in module or body"""
-    module_name: str = func.__module__
-    module_source: str = inspect.getsource(sys.modules[module_name])
-    module_imports, module_wildcards = get_imports(module_source)
-    source: str = textwrap.dedent(inspect.getsource(func))
+    module_imports: Dict[str, str] = dict()
+    module_wildcards: Set[str] = set()
+    source: str = ""
+    if isinstance(func, str):
+        source = textwrap.dedent(func)
+    else:
+        func = cast(Callable, func)
+        module_name: str = func.__module__
+        module_source: str = inspect.getsource(sys.modules[module_name])
+        module_imports, module_wildcards = get_imports(module_source)
+        source = textwrap.dedent(inspect.getsource(func))
+
     func_imports, func_wildcards = get_imports(source)
     all_imports = set(func_imports.values()) | module_wildcards | func_wildcards
     source_node: ast.AST = ast.parse(source)
@@ -44,7 +52,7 @@ def get_func_imports(func: Callable) -> List[str]:
     return list(all_imports)
 
 
-def get_requirements(imports: List[str]) -> str:
+def get_requirements_from_imports(imports: List[str]) -> str:
     """Get the PyPI package name and versions for a list of imports as requirements.txt"""
     packages: dict = importlib_metadata.packages_distributions()
     pypi_names: List[str] = []
@@ -84,3 +92,10 @@ def consistent_requirements(env_requirements: str, func_requirements: str) -> bo
         ):
             return False
     return True
+
+
+def get_requirements(func: Union[Callable, str]) -> str:
+    """Get the requirements for a function"""
+    func_imports = get_func_imports(func)
+    func_requirements = get_requirements_from_imports(func_imports)
+    return func_requirements

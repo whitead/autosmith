@@ -7,7 +7,7 @@ from autosmith.env import (
     consistent_requirements,
     get_func_imports,
     get_imports,
-    get_requirements,
+    get_requirements_from_imports,
 )
 
 
@@ -70,7 +70,7 @@ def test_mixed_func_imports():
 
 
 def test_get_requirements():
-    reqs = get_requirements(["numpy", "pytest", "foo", "math"])
+    reqs = get_requirements_from_imports(["numpy", "pytest", "foo", "math"])
     assert "numpy" in reqs
     assert "pytest" in reqs
     assert "foo" not in reqs
@@ -101,3 +101,7 @@ def test_consistent_requirements():
     """
 
     assert not consistent_requirements(env, proposed)
+
+
+def test_str_func():
+    get_func_imports("def foo(): pass")
