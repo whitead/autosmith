@@ -1,0 +1,2 @@
+# autosmith
+Make tools quickly
