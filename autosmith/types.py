@@ -2,7 +2,8 @@ import subprocess
 from typing import Callable, Dict, Optional, Union
 
 import pkg_resources
-from pydantic import BaseModel, validator
+from pydantic import BaseModel, computed_field, validator
+from pydantic.fields import HttpUrl
 
 from .version import __version__
 
@@ -50,6 +51,12 @@ class ToolEnv(BaseModel):
         except ValueError:
             raise ValueError("Requirements must be valid")
         return v
+
+    @computed_field  # type: ignore[misc]
+    @property  # type: ignore[misc]
+    def url(self) -> HttpUrl:
+        """url is the url of the tool environment"""
+        return HttpUrl(f"http://{self.host}:{self.port}")
 
     def __del__(self):
         if self.container_id is not None:
