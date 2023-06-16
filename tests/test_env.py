@@ -1,8 +1,16 @@
+import time
+
 import requests
 
 from autosmith.docker import Docker
 from autosmith.env import ToolEnv
 from autosmith.smith import smith
+
+
+def test_env_url():
+    env = ToolEnv(requirements="numpy")
+    assert env.url is not None
+    assert str(env.url) == "http://127.0.0.1:8080"
 
 
 def test_smith():
@@ -35,7 +43,7 @@ def test_smith():
     assert env.container_id is not None
 
     if not docker.mock:
-        r = requests.get(f"{env.url}/test2")
+        r = requests.get(f"{env.url}test2")
         assert r.status_code == 200
         assert r.text == '"Goodbye world"'
 
@@ -48,7 +56,7 @@ def test_save():
     json = env.json()
     env.save()
 
-    env2 = ToolEnv.load(env.title)
+    env2 = ToolEnv.load(env.name)
     assert env2.json() == json
 
 
@@ -67,6 +75,7 @@ def test_persist_containers():
     del env
 
     env2 = ToolEnv.load("tool-environment")
+    env2.docker = docker
     assert env2.url == url
     assert env2.container_id is not None
 
@@ -77,4 +86,5 @@ def test_persist_containers():
     cid = env2.container_id
     del env2
 
+    time.sleep(1)
     assert not docker.is_running(cid) or docker.mock

@@ -50,10 +50,12 @@ def get_func_imports(func: Function) -> List[str]:
         source = textwrap.dedent(func)
     else:
         func = cast(Callable, func)
-        module_name: str = func.__module__
-        module_source: str = inspect.getsource(sys.modules[module_name])
-        module_imports, module_wildcards = get_imports(module_source)
         source = textwrap.dedent(inspect.getsource(func))
+
+        module_name: str = func.__module__
+        if module_name != "__main__":
+            module_source: str = inspect.getsource(sys.modules[module_name])
+            module_imports, module_wildcards = get_imports(module_source)
 
     func_imports, func_wildcards = get_imports(source)
     all_imports = set(func_imports.values()) | module_wildcards | func_wildcards

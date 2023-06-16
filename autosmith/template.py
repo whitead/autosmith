@@ -2,8 +2,10 @@ import ast
 import inspect
 import json
 import textwrap
+import warnings
 from typing import Callable, Optional, Union, cast
 
+from datamodel_code_generator.parser.jsonschema import JsonSchemaParser
 from jinja2 import Environment, PackageLoader
 from pydantic import BaseModel, create_model
 
@@ -31,7 +33,9 @@ def make_schema(func: Callable) -> BaseModel:
         # use str as default (or rely on type inference from default)
         else:
             properties[arg] = (str, ...)
-    return create_model(name.capitalize(), **properties, __doc__=desc)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        return create_model(name.capitalize(), **properties, __doc__=desc)
 
 
 def get_func_name(func: Union[Callable, str]) -> str:
@@ -81,19 +85,24 @@ def render_server(
         schema = make_schema(cast(Callable, func))
     if not isinstance(schema, str):
         schema_title = schema.__name__
-        schema = json.dumps(schema.schema())
+        parser = JsonSchemaParser(schema.schema_json())
+        parser.parse_raw()
+        raw_schema = parser.results[0].render()
     else:
         schema = cast(str, schema)
         # check if schema is valid json
         try:
-            json.loads(schema)
             schema_title = json.loads(schema)["title"]
+            parser = JsonSchemaParser(schema)
+            parser.parse_raw()
+            raw_schema = parser.results[0].render()
         except json.JSONDecodeError:
             # if not, assume it's python code
             raw_schema = textwrap.dedent(schema)
             schema_title = (
                 raw_schema.split("(BaseModel):")[0].split("class ")[1].strip()
             )
+
     func_requirements = get_requirements(func)
     env = Environment(loader=PackageLoader("autosmith", "templates"))
 
@@ -114,7 +123,6 @@ def render_server(
         function_name=get_func_name(func),
         description=get_func_description(func),
         input_class_name=schema_title,
-        input_class_schema=schema,
         input_class_raw_schema=raw_schema,
     )
 

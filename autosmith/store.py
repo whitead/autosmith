@@ -5,5 +5,5 @@ store = dict()
 
 def register_env(env: ToolEnv) -> ToolEnv:
     """Register an environment"""
-    store[env.title] = env
+    store[env.name] = env
     return env

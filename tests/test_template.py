@@ -102,6 +102,8 @@ def test_template_server_models():
 
     rendered = render_server(func, schema=Schema)
     assert is_valid_python(rendered)
+    print(rendered)
+    assert "Schema(BaseModel):" in rendered
 
 
 def test_template_server_str():
@@ -119,6 +121,7 @@ def test_template_server_str():
     """
     rendered = render_server(func, schema)
     assert is_valid_python(rendered)
+    assert "Schema(BaseModel):" in rendered
 
 
 def test_template_server_infer():
@@ -130,6 +133,7 @@ def test_template_server_infer():
 
     rendered = render_server(func)
     assert is_valid_python(rendered)
+    assert "Func(BaseModel):" in rendered
 
 
 def test_template_server_fail():
@@ -154,4 +158,4 @@ def test_template_container():
     """Test templating container"""
     tool_env = ToolEnv(requirements="pytest==6.2.2")
     rendered = render_container(tool_env)
-    assert tool_env.host in rendered
+    assert str(tool_env.port) in rendered

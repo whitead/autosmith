@@ -13,4 +13,4 @@ COPY ./main.py /app/
 CMD ["uvicorn",\
     "main:app", \
     "--port", "{{ env.port }}",\
-    "--host", "{{ env.host }}"]
+    "--host", "0.0.0.0"]

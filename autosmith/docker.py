@@ -13,7 +13,7 @@ class Docker(BaseModel):
         if v:
             return v
         try:
-            subprocess.run(["docker", "--version"])
+            subprocess.run(["docker", "--version"], capture_output=True)
         except FileNotFoundError:
             if v is None:
                 return True
@@ -31,15 +31,17 @@ class Docker(BaseModel):
         if output.returncode != 0:
             raise ValueError("Docker ps failed")
         for cid in output.stdout.decode("utf-8").splitlines():
-            subprocess.run(["docker", "rm", "-f", cid])
+            subprocess.run(["docker", "rm", "-f", cid], capture_output=True)
 
         # remove old images
-        subprocess.run(["docker", "rmi", image_name])
+        subprocess.run(["docker", "rmi", image_name], capture_output=True)
 
     def build_image(self, image_name: str, dir: Path):
         if self.mock:
             return
-        output = subprocess.run(["docker", "build", "-t", image_name, dir])
+        output = subprocess.run(
+            ["docker", "build", "-t", image_name, dir], capture_output=True
+        )
         if output.returncode != 0:
             raise ValueError("Docker build failed")
 
@@ -54,10 +56,10 @@ class Docker(BaseModel):
             raise ValueError("Docker run failed")
         return output.stdout.decode("utf-8").strip()
 
-    def kill_container(self, cid: str):
+    def remove_container(self, cid: str):
         if self.mock:
             return
-        subprocess.run(["docker", "kill", cid])
+        subprocess.run(["docker", "rm", "-f", cid], capture_output=True)
 
     def is_running(self, cid: str) -> bool:
         if self.mock:

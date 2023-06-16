@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Callable, Dict, Optional, Union
 
 import pkg_resources
-from pydantic import BaseModel, Field, HttpUrl, PrivateAttr, computed_field, validator
+from pydantic import BaseModel, Field, PrivateAttr, validator
 
 from .docker import Docker
 from .version import __version__
@@ -18,9 +18,8 @@ class EncodedTool(BaseModel):
     function: str
     function_name: str
     input_class_name: str
-    input_class_schema: str
     description: str
-    input_class_raw_schema: Optional[str] = None
+    input_class_raw_schema: str
 
     @validator("input_class_name")
     def input_class_name_should_be_capitalized(cls, v):
@@ -37,9 +36,9 @@ class ToolEnv(BaseModel):
     """ToolEnv is the environment for a set of tools"""
 
     requirements: str
-    title: str = "tool-environment"
+    name: str = "tool-environment"
     version: str = __version__
-    host: str = "0.0.0.0"
+    host: str = "127.0.0.1"
     port: int = 8080
     tools: Dict[str, EncodedTool] = {}
     docker_file_commands: str = ""
@@ -48,6 +47,7 @@ class ToolEnv(BaseModel):
     _saved: bool = PrivateAttr(False)
     save_dir: Optional[Path] = Path.home() / ".autosmith"
     docker: Docker = Field(default_factory=Docker)
+    url: str = ""
 
     @validator("requirements")
     def requirements_must_be_valid(cls, v):
@@ -57,15 +57,21 @@ class ToolEnv(BaseModel):
             raise ValueError("Requirements must be valid")
         return v
 
-    @computed_field  # type: ignore[misc]
-    @property  # type: ignore[misc]
-    def url(self) -> HttpUrl:
+    @validator("url", always=True, pre=True)
+    def url_is_computed(cls, v, values) -> str:
         """url is the url of the tool environment"""
-        return HttpUrl(f"http://{self.host}:{self.port}")
+        return f"http://{values['host']}:{values['port']}"
 
-    def __del__(self):
-        if self.container_id is not None and not self._saved:
-            self.docker.kill_container(self.container_id)
+    def close(self):
+        cid = self.container_id
+        if cid is not None and not self._saved:
+            self.docker.remove_container(cid)
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        self.close()
 
     def save(self):
         """Save the tool environment"""
@@ -73,7 +79,7 @@ class ToolEnv(BaseModel):
             raise ValueError("save_dir must be set")
         if not self.save_dir.exists():
             os.mkdir(self.save_dir)
-        with open(self.save_dir / f"{self.title}", "wb") as f:
+        with open(self.save_dir / f"{self.name}", "wb") as f:
             pickle.dump(self, f)
         self._saved = True
 
