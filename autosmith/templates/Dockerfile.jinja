@@ -2,7 +2,7 @@ FROM {{ env.base_image }}
 
 WORKDIR /app
 
-{{ env.dockerfile_pre_commands }}
+{{ env.docker_file_commands }}
 
 COPY ./requirements.txt /app/requirements.txt
 

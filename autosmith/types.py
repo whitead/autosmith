@@ -1,9 +1,11 @@
+import os
+import pickle
 import subprocess
+from pathlib import Path
 from typing import Callable, Dict, Optional, Union
 
 import pkg_resources
-from pydantic import BaseModel, computed_field, validator
-from pydantic.fields import HttpUrl
+from pydantic import BaseModel, HttpUrl, PrivateAttr, computed_field, validator
 
 from .version import __version__
 
@@ -32,7 +34,7 @@ class EncodedTool(BaseModel):
 
 
 class ToolEnv(BaseModel):
-    """ToolEnv is the environment for a tool"""
+    """ToolEnv is the environment for a set of tools"""
 
     requirements: str
     title: str = "tool-environment"
@@ -40,9 +42,11 @@ class ToolEnv(BaseModel):
     host: str = "0.0.0.0"
     port: int = 8080
     tools: Dict[str, EncodedTool] = {}
-    docker_file_precommands: str = ""
+    docker_file_commands: str = ""
     base_image: str = "python:3.11-slim"
     container_id: Optional[str] = None
+    _saved: bool = PrivateAttr(False)
+    save_dir: Optional[Path] = Path.home() / ".autosmith"
 
     @validator("requirements")
     def requirements_must_be_valid(cls, v):
@@ -59,5 +63,27 @@ class ToolEnv(BaseModel):
         return HttpUrl(f"http://{self.host}:{self.port}")
 
     def __del__(self):
-        if self.container_id is not None:
+        if self.container_id is not None and not self._saved:
             subprocess.run(["docker", "rm", "-f", self.container_id])
+
+    def save(self):
+        """Save the tool environment"""
+        if self.save_dir is None:
+            raise ValueError("save_dir must be set")
+        if not self.save_dir.exists():
+            os.mkdir(self.save_dir)
+        with open(self.save_dir / f"{self.title}", "wb") as f:
+            pickle.dump(self, f)
+        self._saved = True
+
+    @classmethod
+    def load(
+        cls,
+        title: str = "tool-environment",
+        save_dir: Path = Path.home() / ".autosmith",
+    ):
+        """Load a tool environment"""
+        with open(save_dir / f"{title}", "rb") as f:
+            o = pickle.load(f)
+        o._saved = False
+        return o

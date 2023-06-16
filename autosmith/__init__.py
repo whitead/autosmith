@@ -2,6 +2,6 @@ import subprocess
 
 # check if docker is installed
 try:
-    subprocess.run(["docker", "ps"])
+    subprocess.run(["docker", "ps"], shell=True)
 except FileNotFoundError:
     raise ImportError("Docker is not installed")
