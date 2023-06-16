@@ -26,23 +26,25 @@ def test_make_schema():
     def func(a: int, b: float) -> int:
         """Add a and b"""
         return int(a + b)
-    
+
     class Func(BaseModel):
         """Add a and b"""
+
         a: int
         b: float
 
     schema = make_schema(func)
     assert schema.schema() == Func.schema()
 
+
 def test_make_schema_imports():
     def func(a: int, b: float) -> int:
         """Add a and b"""
-        import numpy as np
         return int(a + b)
-    
+
     class Func(BaseModel):
         """Add a and b"""
+
         a: int
         b: float
 
@@ -50,20 +52,22 @@ def test_make_schema_imports():
     print(schema.schema())
     assert schema.schema() == Func.schema()
 
+
 def test_empty_schema():
     """Test with callable function and make sure schema is empty"""
 
     def func() -> str:
         """print hello world"""
         return "hello world"
-    
+
     class Func(BaseModel):
         """print hello world"""
+
         pass
-    
+
     schema = make_schema(func)
     assert schema.schema() == Func.schema()
-    
+
 
 def test_get_func_name():
     def func(a: int, b: float) -> int:
@@ -122,7 +126,6 @@ def test_template_server_infer():
 
     def func(a: int, b: float) -> int:
         """Add a and b"""
-        import numpy as np
         return int(a + b)
 
     rendered = render_server(func)
@@ -142,8 +145,10 @@ def test_template_server_fail():
 
     def no_doc():
         pass
+
     with pytest.raises(ValueError):
         render_server(no_doc)
+
 
 def test_template_container():
     """Test templating container"""

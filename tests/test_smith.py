@@ -1,17 +1,21 @@
-from autosmith.smith import smith
 import subprocess
+
 import requests
+
+from autosmith.smith import smith
+
 
 def test_smith():
     def test():
         """Test function"""
         import numpy as np
-        return 'hello world: ' + str(np.random.random())
+
+        return "hello world: " + str(np.random.random())
+
     env = smith(test)
     assert env.container_id is not None
-    assert 'numpy' in env.requirements
-    assert 'test' in env.tools
-
+    assert "numpy" in env.requirements
+    assert "test" in env.tools
 
     r = requests.get(f"http://localhost:{env.port}/test")
     assert r.status_code == 200
@@ -23,6 +27,7 @@ def test_smith():
     def test2():
         """Test function 2"""
         return "Goodbye world"
+
     env = smith(test2, env)
     assert env.container_id is not None
 

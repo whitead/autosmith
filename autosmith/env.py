@@ -2,14 +2,24 @@ import ast
 import inspect
 import sys
 import textwrap
-from typing import Callable, Dict, List, Mapping, Set, Tuple, Union, cast
-from .types import Function
-from packaging.requirements import Requirement
+from typing import Callable, Dict, List, Mapping, Set, Tuple, cast
+
 import importlib_metadata
+from packaging.requirements import Requirement
+
+from .types import Function
+
 
 def _parse_requirements(requirements: str) -> Set[Requirement]:
     """Parse a requirements.txt file into a set of Requirement objects"""
-    return set([Requirement(l.strip()) for l in requirements.splitlines() if len(l.strip()) > 0])
+    return set(
+        [
+            Requirement(line.strip())
+            for line in requirements.splitlines()
+            if len(line.strip()) > 0
+        ]
+    )
+
 
 def get_imports(source: str) -> Tuple[Dict[str, str], Set[str]]:
     module_node: ast.AST = ast.parse(source)
@@ -75,10 +85,10 @@ def consistent_requirements(env_requirements: str, func_requirements: str) -> bo
 
     Does not account for versions currently
     """
-    
+
     # make them lists so they aren't consumed
     env_reqs = _parse_requirements(env_requirements)
-    func_reqs =  _parse_requirements(func_requirements)
+    func_reqs = _parse_requirements(func_requirements)
 
     return env_reqs.issuperset(func_reqs)
 
@@ -86,10 +96,11 @@ def consistent_requirements(env_requirements: str, func_requirements: str) -> bo
 def merge_requirements(env_requirements: str, func_requirements: str) -> str:
     """Merge the requirements of a function and an environment to create new requirements"""
     env_reqs = _parse_requirements(env_requirements)
-    func_reqs =  _parse_requirements(func_requirements)
+    func_reqs = _parse_requirements(func_requirements)
 
     merged_reqs = env_reqs.union(func_reqs)
     return "\n".join([str(r) for r in merged_reqs])
+
 
 def get_requirements(func: Function) -> str:
     """Get the requirements for a function"""

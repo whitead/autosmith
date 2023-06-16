@@ -16,7 +16,7 @@ def make_schema(func: Callable) -> BaseModel:
     name = func.__name__
     desc = func.__doc__
     if desc is None:
-        raise ValueError("Function must have a docstring if inferring schema" )
+        raise ValueError("Function must have a docstring if inferring schema")
     properties = {}
     for arg in func.__code__.co_varnames[: func.__code__.co_argcount]:
         # use default values
@@ -131,6 +131,7 @@ def render_container(tool_env: ToolEnv) -> str:
     env = Environment(loader=PackageLoader("autosmith", "templates"))
     template = env.get_template("Dockerfile.jinja")
     return template.render(env=tool_env)
+
 
 def render_requirements(tool_env: ToolEnv) -> str:
     """Render requirements.txt from tool_env"""

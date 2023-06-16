@@ -5,10 +5,10 @@ from numpy import arange
 
 from autosmith.env import (
     consistent_requirements,
-    merge_requirements,
     get_func_imports,
     get_imports,
     get_requirements_from_imports,
+    merge_requirements,
 )
 
 

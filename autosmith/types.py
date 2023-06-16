@@ -1,12 +1,13 @@
-from typing import Dict, Optional, Union, Callable
+import subprocess
+from typing import Callable, Dict, Optional, Union
 
 import pkg_resources
 from pydantic import BaseModel, validator
-import subprocess
 
 from .version import __version__
 
 Function = Union[str, Callable]
+
 
 class EncodedTool(BaseModel):
     """EncodedTool is a tool encoded as a string"""
@@ -21,12 +22,14 @@ class EncodedTool(BaseModel):
     @validator("input_class_name")
     def input_class_name_should_be_capitalized(cls, v):
         return v.capitalize()
-        
+
     @validator("function_name")
     def function_name_cannot_be_docs(cls, v):
         if v == "docs" or v == "Docs":
             raise ValueError("Function name cannot be docs")
         return v
+
+
 class ToolEnv(BaseModel):
     """ToolEnv is the environment for a tool"""
 
