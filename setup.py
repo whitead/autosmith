@@ -17,7 +17,12 @@ setup(
     license="Apache 2.0",
     packages=["autosmith"],
     package_data={"autosmith": ["templates/*"]},
-    install_requires=["jinja2", "pydantic", "importlib_metadata"],
+    install_requires=[
+        "jinja2",
+        "pydantic",
+        "datamodel_code_generator",
+        "importlib_metadata",
+    ],
     test_suite="tests",
     long_description=long_description,
     long_description_content_type="text/markdown",

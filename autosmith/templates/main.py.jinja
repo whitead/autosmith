@@ -1,32 +1,21 @@
-from fastapi import FastAPI
-from pydantic import create_model
-import json
+from fastapi import FastAPI, Depends
+from pydantic import *
+from typing import *
 
 app = FastAPI(
-    title="{{ env.title }}",
+    title="{{ env.name }}",
     version="{{ env.version }}"
 )
 
 {% for endpoint, tool in env.tools.items() %}
 
-{% if tool.input_class_raw_schema is not none %}
-
 {{ tool.input_class_raw_schema }}
 
-{% else %}
-
-{{ tool.input_class_name }} = create_model(
-    "{{ tool.input_class_name }}",
-    **({{ tool.input_class_schema
-      }}["properties"])
-)
-
-{% endif %}
 
 {{ tool.function }}
 
 @app.get("/{{ endpoint }}")
-async def {{ endpoint }}(input: {{ tool.input_class_name}}):
+async def {{ endpoint }}_get(input: {{ tool.input_class_name}} = Depends()):
     """{{ tool.description }}"""
     return {{ tool.function_name }}(**input.dict())
 

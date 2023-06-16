@@ -1,107 +1,87 @@
-from math import *  # noqa
+import requests
 
-import pytest
-from numpy import arange
-
-from autosmith.env import (
-    consistent_requirements,
-    get_func_imports,
-    get_imports,
-    get_requirements_from_imports,
-)
+from autosmith.docker import Docker
+from autosmith.env import ToolEnv
+from autosmith.smith import smith
 
 
-def test_nested_imports():
-    source = "import a.b.c\n" "from a.b import c\n" "c.do_something()\n"
-    imports, _ = get_imports(source)
-    # Assert that the imports list contains the expected modules
-    assert imports == {"a.b.c": "a.b.c", "c": "a.b"}
+def test_env_url():
+    env = ToolEnv(requirements="numpy")
+    assert env.url is not None
+    assert str(env.url) == "http://127.0.0.1:8080"
 
 
-def test_imports_with_aliases():
-    source = "import a as b\n" "from a import b as c\n" "c.do_something()\n" "b = c"
-    imports, _ = get_imports(source)
-    assert imports == {"b": "a", "c": "a"}
+def test_smith():
+    def test():
+        """Test function"""
+        import numpy as np
+
+        return "hello world: " + str(np.random.random())
+
+    docker = Docker(mock=None)
+
+    env = smith(test, docker=docker)
+    assert env.container_id is not None
+    assert "numpy" in env.requirements
+    assert "test" in env.tools
+
+    if not docker.mock:
+        r = requests.get(f"{env.url}/test")
+        assert r.status_code == 200
+        assert r.text.startswith('"hello world: ')
+
+    cid = env.container_id
+    assert docker.is_running(cid)
+
+    def test2():
+        """Test function 2"""
+        return "Goodbye world"
+
+    env = smith(test2, env, docker=docker)
+    assert env.container_id is not None
+
+    if not docker.mock:
+        r = requests.get(f"{env.url}/test2")
+        assert r.status_code == 200
+        assert r.text == '"Goodbye world"'
+
+    del env
+    assert not docker.is_running(cid) or docker.mock
 
 
-def test_wildcard_imports():
-    source = "from foo import *\n" "from bar import *\n" "import bar\n"
-    imports, wildcards = get_imports(source)
-    assert wildcards == set(["foo", "bar"])
-    assert "bar" in imports
+def test_save():
+    env = ToolEnv(requirements="numpy")
+    json = env.json()
+    env.save()
+
+    env2 = ToolEnv.load(env.name)
+    assert env2.json() == json
 
 
-def test_body_alone_imports():
-    # fmt: off
-    # type: ignore
-    # isort: skip
-    def func():
-        import a  # noqa
-        import b as c  # noqa
-    # fmt: on
-    imports = get_func_imports(func)
-    assert set(imports) == set(["a", "b", "math"])
+def test_persist_containers():
+    def test():
+        """Test function"""
+        import numpy as np
 
+        return "hello world: " + str(np.random.random())
 
-def test_body_and_module_func_imports():
-    # fmt: off
-    # type: ignore
-    # isort: skip
-    def func():
-        arange(3)
-        pytest.main()
-    # fmt: on
-    imports = get_func_imports(func)
-    assert set(imports) == set(["numpy", "pytest", "math"])
+    docker = Docker(mock=None)
 
+    env = smith(test, docker=docker)
+    env.save()
+    url = env.url
+    del env
 
-def test_mixed_func_imports():
-    # fmt: off
-    # type: ignore
-    # isort: skip
-    def func():
-        sin(3)  # noqa
-        arange(3)
-        pytest.main()
-        import foo  # noqa
-    # fmt: on
-    imports = get_func_imports(func)
-    assert set(imports) == set(["numpy", "pytest", "foo", "math"])
+    env2 = ToolEnv.load("tool-environment")
+    env2.docker = docker
+    assert env2.url == url
+    assert env2.container_id is not None
 
+    if not docker.mock:
+        r = requests.get(f"{env2.url}/test")
+        assert r.status_code == 200
+        assert r.text.startswith('"hello world: ')
+    cid = env2.container_id
+    env2.close()
 
-def test_get_requirements():
-    reqs = get_requirements_from_imports(["numpy", "pytest", "foo", "math"])
-    assert "numpy" in reqs
-    assert "pytest" in reqs
-    assert "foo" not in reqs
-
-
-def test_consistent_requirements():
-    env = """
-    numpy>=1.19.5
-    pytest==6.2.2
-    """
-    proposed = """
-    numpy==1.19.5
-    pytest==6.2.2
-    """
-
-    assert consistent_requirements(env, proposed)
-
-    proposed = """
-    numpy==1.23
-    pytest==6.2.2
-    """
-
-    assert consistent_requirements(env, proposed)
-
-    proposed = """
-    numpy==1.18
-    pytest==6.2.2
-    """
-
-    assert not consistent_requirements(env, proposed)
-
-
-def test_str_func():
-    get_func_imports("def foo(): pass")
+    assert not docker.is_running(cid) or docker.mock

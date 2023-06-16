@@ -1,101 +1,96 @@
-import ast
-import inspect
-import sys
-import textwrap
-from typing import Callable, Dict, List, Mapping, Set, Tuple, Union, cast
+import os
+import pickle
+from pathlib import Path
+from typing import Callable, Dict, Optional, Union
 
-import importlib_metadata
+import pkg_resources
+from pydantic import BaseModel, Field, PrivateAttr, validator
 
+from .docker import Docker
+from .version import __version__
 
-def get_imports(source: str) -> Tuple[Dict[str, str], Set[str]]:
-    module_node: ast.AST = ast.parse(source)
-    imports: Dict[str, str] = dict()
-    wildcards = set()
-    # Walk through all the nodes in the module body
-    for n in ast.walk(module_node):
-        if isinstance(n, ast.Import):
-            imports.update({a.name: a.name for a in n.names if not a.asname})
-            imports.update({a.asname: a.name for a in n.names if a.asname})
-        # If the node is an import-from statement
-        elif isinstance(n, ast.ImportFrom):
-            imports.update({a.asname: cast(str, n.module) for a in n.names if a.asname})
-            imports.update(
-                {a.name: cast(str, n.module) for a in n.names if not a.asname}
-            )
-            if "*" in imports:
-                wildcards.add(imports["*"])
-    return imports, wildcards
+Function = Union[str, Callable]
 
 
-def get_func_imports(func: Union[Callable, str]) -> List[str]:
-    """Get the imports necessary to run a function - either present in module or body"""
-    module_imports: Dict[str, str] = dict()
-    module_wildcards: Set[str] = set()
-    source: str
-    if isinstance(func, str):
-        source = textwrap.dedent(func)
-    else:
-        func = cast(Callable, func)
-        module_name: str = func.__module__
-        module_source: str = inspect.getsource(sys.modules[module_name])
-        module_imports, module_wildcards = get_imports(module_source)
-        source = textwrap.dedent(inspect.getsource(func))
+class EncodedTool(BaseModel):
+    """EncodedTool is a tool encoded as a string"""
 
-    func_imports, func_wildcards = get_imports(source)
-    all_imports = set(func_imports.values()) | module_wildcards | func_wildcards
-    source_node: ast.AST = ast.parse(source)
-    # now see which module imports are actually used in the function
-    for n in ast.walk(source_node):
-        if isinstance(n, ast.Name):
-            if n.id in module_imports:
-                all_imports.add(module_imports[n.id])
-    return list(all_imports)
+    function: str
+    function_name: str
+    input_class_name: str
+    description: str
+    input_class_raw_schema: str
+
+    @validator("input_class_name")
+    def input_class_name_should_be_capitalized(cls, v):
+        return v.capitalize()
+
+    @validator("function_name")
+    def function_name_cannot_be_docs(cls, v):
+        if v == "docs" or v == "Docs":
+            raise ValueError("Function name cannot be docs")
+        return v
 
 
-def get_requirements_from_imports(imports: List[str]) -> str:
-    """Get the PyPI package name and versions for a list of imports as requirements.txt"""
-    packages: Mapping[str, List[str]] = importlib_metadata.packages_distributions()
-    pypi_names: List[str] = []
-    for module in imports:
-        if module in packages:
-            # Use the first element of the list as the distribution name
-            dist: str = packages[module][0]
-            version: str = importlib_metadata.version(dist)
-            specifier: str = f"{dist}=={version}"
-            pypi_names.append(specifier)
-    return "\n".join(pypi_names)
+class ToolEnv(BaseModel):
+    """ToolEnv is the environment for a set of tools"""
 
+    requirements: str
+    name: str = "tool-environment"
+    version: str = __version__
+    host: str = "127.0.0.1"
+    port: int = 8080
+    tools: Dict[str, EncodedTool] = {}
+    docker_file_commands: str = ""
+    base_image: str = "python:3.11-slim"
+    container_id: Optional[str] = None
+    _saved: bool = PrivateAttr(False)
+    save_dir: Optional[Path] = Path.home() / ".autosmith"
+    docker: Docker = Field(default_factory=Docker)
+    url: str = ""
 
-def consistent_requirements(env_requirements: str, func_requirements: str) -> bool:
-    """Checks if a function's requirements are consistent with the environment
+    @validator("requirements")
+    def requirements_must_be_valid(cls, v):
+        try:
+            pkg_resources.parse_requirements(v.splitlines())
+        except ValueError:
+            raise ValueError("Requirements must be valid")
+        return v
 
-    Note that this does account for versions!
-    """
-    # We can use the pkg_resources and packaging modules to parse and compare requirements
-    import pkg_resources
+    @validator("url", always=True, pre=True)
+    def url_is_computed(cls, v, values) -> str:
+        """url is the url of the tool environment"""
+        return f"http://{values['host']}:{values['port']}"
 
-    # make them lists so they aren't consumed
-    env_reqs = list(pkg_resources.parse_requirements(env_requirements.splitlines()))
-    func_reqs = list(pkg_resources.parse_requirements(func_requirements.splitlines()))
-    # kind of weird, but we assume func requirements has ==
-    for req in env_reqs:
-        if not any(
-            [
-                any(
-                    req.specifier.filter(  # type: ignore
-                        [str(r.specifier).split("==")[-1]]
-                    )  # type: ignore
-                )
-                for r in func_reqs
-                if r.key == req.key
-            ]
-        ):
-            return False
-    return True
+    def close(self):
+        cid = self.container_id
+        if cid is not None and not self._saved:
+            self.docker.remove_container(cid)
 
+    def __enter__(self):
+        return self
 
-def get_requirements(func: Union[Callable, str]) -> str:
-    """Get the requirements for a function"""
-    func_imports = get_func_imports(func)
-    func_requirements = get_requirements_from_imports(func_imports)
-    return func_requirements
+    def __exit__(self, exc_type, exc_value, traceback):
+        self.close()
+
+    def save(self):
+        """Save the tool environment"""
+        if self.save_dir is None:
+            raise ValueError("save_dir must be set")
+        if not self.save_dir.exists():
+            os.mkdir(self.save_dir)
+        with open(self.save_dir / f"{self.name}", "wb") as f:
+            pickle.dump(self, f)
+        self._saved = True
+
+    @classmethod
+    def load(
+        cls,
+        title: str = "tool-environment",
+        save_dir: Path = Path.home() / ".autosmith",
+    ):
+        """Load a tool environment"""
+        with open(save_dir / f"{title}", "rb") as f:
+            o = pickle.load(f)
+        o._saved = False
+        return o
