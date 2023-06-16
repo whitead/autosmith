@@ -8,8 +8,8 @@ from autosmith.template import (
     get_func_description,
     get_func_name,
     make_schema,
-    template_container,
-    template_server,
+    render_container,
+    render_server,
 )
 from autosmith.types import ToolEnv
 
@@ -26,15 +26,44 @@ def test_make_schema():
     def func(a: int, b: float) -> int:
         """Add a and b"""
         return int(a + b)
+    
+    class Func(BaseModel):
+        """Add a and b"""
+        a: int
+        b: float
 
     schema = make_schema(func)
-    foo = schema(a=1, b=2.0)
-    assert foo.a == 1
-    assert foo.b == 2.0
-    assert foo.a.__class__.__name__ == "int"
-    assert foo.description == "Add a and b"
-    assert foo.__class__.__name__ == "func"
+    assert schema.schema() == Func.schema()
 
+def test_make_schema_imports():
+    def func(a: int, b: float) -> int:
+        """Add a and b"""
+        import numpy as np
+        return int(a + b)
+    
+    class Func(BaseModel):
+        """Add a and b"""
+        a: int
+        b: float
+
+    schema = make_schema(func)
+    print(schema.schema())
+    assert schema.schema() == Func.schema()
+
+def test_empty_schema():
+    """Test with callable function and make sure schema is empty"""
+
+    def func() -> str:
+        """print hello world"""
+        return "hello world"
+    
+    class Func(BaseModel):
+        """print hello world"""
+        pass
+    
+    schema = make_schema(func)
+    assert schema.schema() == Func.schema()
+    
 
 def test_get_func_name():
     def func(a: int, b: float) -> int:
@@ -67,7 +96,7 @@ def test_template_server_models():
         a: int
         b: float
 
-    rendered = template_server(func, schema=Schema)
+    rendered = render_server(func, schema=Schema)
     assert is_valid_python(rendered)
 
 
@@ -84,7 +113,7 @@ def test_template_server_str():
         a: int
         b: float
     """
-    rendered = template_server(func, schema)
+    rendered = render_server(func, schema)
     assert is_valid_python(rendered)
 
 
@@ -93,9 +122,10 @@ def test_template_server_infer():
 
     def func(a: int, b: float) -> int:
         """Add a and b"""
+        import numpy as np
         return int(a + b)
 
-    rendered = template_server(func)
+    rendered = render_server(func)
     assert is_valid_python(rendered)
 
 
@@ -108,11 +138,15 @@ def test_template_server_fail():
         return a + b
     """
     with pytest.raises(ValueError):
-        template_server(func)
+        render_server(func)
 
+    def no_doc():
+        pass
+    with pytest.raises(ValueError):
+        render_server(no_doc)
 
 def test_template_container():
     """Test templating container"""
     tool_env = ToolEnv(requirements="pytest==6.2.2")
-    rendered = template_container(tool_env)
+    rendered = render_container(tool_env)
     assert tool_env.host in rendered

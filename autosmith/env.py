@@ -3,9 +3,13 @@ import inspect
 import sys
 import textwrap
 from typing import Callable, Dict, List, Mapping, Set, Tuple, Union, cast
-
+from .types import Function
+from packaging.requirements import Requirement
 import importlib_metadata
 
+def _parse_requirements(requirements: str) -> Set[Requirement]:
+    """Parse a requirements.txt file into a set of Requirement objects"""
+    return set([Requirement(l.strip()) for l in requirements.splitlines() if len(l.strip()) > 0])
 
 def get_imports(source: str) -> Tuple[Dict[str, str], Set[str]]:
     module_node: ast.AST = ast.parse(source)
@@ -27,7 +31,7 @@ def get_imports(source: str) -> Tuple[Dict[str, str], Set[str]]:
     return imports, wildcards
 
 
-def get_func_imports(func: Union[Callable, str]) -> List[str]:
+def get_func_imports(func: Function) -> List[str]:
     """Get the imports necessary to run a function - either present in module or body"""
     module_imports: Dict[str, str] = dict()
     module_wildcards: Set[str] = set()
@@ -69,32 +73,25 @@ def get_requirements_from_imports(imports: List[str]) -> str:
 def consistent_requirements(env_requirements: str, func_requirements: str) -> bool:
     """Checks if a function's requirements are consistent with the environment
 
-    Note that this does account for versions!
+    Does not account for versions currently
     """
-    # We can use the pkg_resources and packaging modules to parse and compare requirements
-    import pkg_resources
-
+    
     # make them lists so they aren't consumed
-    env_reqs = list(pkg_resources.parse_requirements(env_requirements.splitlines()))
-    func_reqs = list(pkg_resources.parse_requirements(func_requirements.splitlines()))
-    # kind of weird, but we assume func requirements has ==
-    for req in env_reqs:
-        if not any(
-            [
-                any(
-                    req.specifier.filter(  # type: ignore
-                        [str(r.specifier).split("==")[-1]]
-                    )  # type: ignore
-                )
-                for r in func_reqs
-                if r.key == req.key
-            ]
-        ):
-            return False
-    return True
+    env_reqs = _parse_requirements(env_requirements)
+    func_reqs =  _parse_requirements(func_requirements)
+
+    return env_reqs.issuperset(func_reqs)
 
 
-def get_requirements(func: Union[Callable, str]) -> str:
+def merge_requirements(env_requirements: str, func_requirements: str) -> str:
+    """Merge the requirements of a function and an environment to create new requirements"""
+    env_reqs = _parse_requirements(env_requirements)
+    func_reqs =  _parse_requirements(func_requirements)
+
+    merged_reqs = env_reqs.union(func_reqs)
+    return "\n".join([str(r) for r in merged_reqs])
+
+def get_requirements(func: Function) -> str:
     """Get the requirements for a function"""
     func_imports = get_func_imports(func)
     func_requirements = get_requirements_from_imports(func_imports)

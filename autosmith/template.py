@@ -15,25 +15,23 @@ def make_schema(func: Callable) -> BaseModel:
     """Make a schema from a function"""
     name = func.__name__
     desc = func.__doc__
+    if desc is None:
+        raise ValueError("Function must have a docstring if inferring schema" )
     properties = {}
-    for arg in func.__code__.co_varnames:
-        # use type hints
-        if arg in func.__annotations__:
-            properties[arg] = (func.__annotations__[arg], ...)
+    for arg in func.__code__.co_varnames[: func.__code__.co_argcount]:
         # use default values
-        elif func.__defaults__ and arg in func.__defaults__:
-            properties[arg] = (
-                type(
-                    func.__defaults__[
-                        func.__code__.co_varnames.index(arg) - len(func.__defaults__)
-                    ]
-                ),
-                ...,
-            )
-        # use str as default
+        if func.__defaults__ and arg in func.__defaults__:
+            properties[arg] = func.__defaults__[func.__code__.co_varnames.index(arg)]
+        # use type hints (no elif - intentional
+        if arg in func.__annotations__:
+            if arg in properties:
+                properties[arg] = (func.__annotations__[arg], properties[arg])
+            else:
+                properties[arg] = (func.__annotations__[arg], ...)
+        # use str as default (or rely on type inference from default)
         else:
             properties[arg] = (str, ...)
-    return create_model(name, **properties, description=desc)
+    return create_model(name.capitalize(), **properties, __doc__=desc)
 
 
 def get_func_name(func: Union[Callable, str]) -> str:
@@ -69,7 +67,7 @@ def func_to_url(name: str) -> str:
     return name.replace("_", "-")
 
 
-def template_server(
+def render_server(
     func: Union[Callable, str],
     schema: Optional[Union[BaseModel, str]] = None,
     tool_env: Optional[ToolEnv] = None,
@@ -128,8 +126,14 @@ def template_server(
     return template.render(env=tool_env)
 
 
-def template_container(tool_env: ToolEnv) -> str:
+def render_container(tool_env: ToolEnv) -> str:
     """template a container with a tool environment"""
     env = Environment(loader=PackageLoader("autosmith", "templates"))
     template = env.get_template("Dockerfile.jinja")
+    return template.render(env=tool_env)
+
+def render_requirements(tool_env: ToolEnv) -> str:
+    """Render requirements.txt from tool_env"""
+    env = Environment(loader=PackageLoader("autosmith", "templates"))
+    template = env.get_template("requirements.txt.jinja")
     return template.render(env=tool_env)

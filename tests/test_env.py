@@ -5,6 +5,7 @@ from numpy import arange
 
 from autosmith.env import (
     consistent_requirements,
+    merge_requirements,
     get_func_imports,
     get_imports,
     get_requirements_from_imports,
@@ -78,7 +79,7 @@ def test_get_requirements():
 
 def test_consistent_requirements():
     env = """
-    numpy>=1.19.5
+    numpy==1.19.5
     pytest==6.2.2
     """
     proposed = """
@@ -89,15 +90,14 @@ def test_consistent_requirements():
     assert consistent_requirements(env, proposed)
 
     proposed = """
-    numpy==1.23
-    pytest==6.2.2
+    numpy==1.19.5
     """
 
     assert consistent_requirements(env, proposed)
 
     proposed = """
     numpy==1.18
-    pytest==6.2.2
+    pytest
     """
 
     assert not consistent_requirements(env, proposed)
@@ -105,3 +105,28 @@ def test_consistent_requirements():
 
 def test_str_func():
     get_func_imports("def foo(): pass")
+
+
+def test_merge_requirements():
+    env = """
+    numpy==1.19.5
+    pytest==6.2.2
+    """
+    proposed = """
+    numpy==1.19.5
+    pytest==6.2.2
+    """
+
+    assert consistent_requirements(env, merge_requirements(env, proposed))
+
+    proposed = """
+    numpy
+    """
+
+    assert not consistent_requirements(env, merge_requirements(env, proposed))
+
+    proposed = """
+    rdkit
+    """
+
+    assert consistent_requirements(env + "\nrdkit", merge_requirements(env, proposed))

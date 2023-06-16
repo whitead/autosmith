@@ -26,7 +26,7 @@ app = FastAPI(
 {{ tool.function }}
 
 @app.get("/{{ endpoint }}")
-async def {{ endpoint }}(input: {{ tool.input_class_name}}):
+async def {{ endpoint }}_get(input: {{ tool.input_class_name}} = {{ tool.input_class_name}}()):
     """{{ tool.description }}"""
     return {{ tool.function_name }}(**input.dict())
 
