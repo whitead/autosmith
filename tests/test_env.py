@@ -2,7 +2,6 @@ import requests
 
 from autosmith.docker import Docker
 from autosmith.env import ToolEnv
-from autosmith.smith import smith
 
 
 def test_env_url():
@@ -11,7 +10,7 @@ def test_env_url():
     assert str(env.url) == "http://127.0.0.1:8080"
 
 
-def test_smith():
+def test_env_add():
     def test():
         """Test function"""
         import numpy as np
@@ -20,7 +19,8 @@ def test_smith():
 
     docker = Docker(mock=None)
 
-    env = smith(test, docker=docker)
+    env = ToolEnv(docker=docker)
+    env.add(test)
     assert env.container_id is not None
     assert "numpy" in env.requirements
     assert "test" in env.tools
@@ -37,7 +37,7 @@ def test_smith():
         """Test function 2"""
         return "Goodbye world"
 
-    env = smith(test2, env, docker=docker)
+    env = env.add(test2)
     assert env.container_id is not None
 
     if not docker.mock:
@@ -66,8 +66,8 @@ def test_persist_containers():
         return "hello world: " + str(np.random.random())
 
     docker = Docker(mock=None)
-
-    env = smith(test, docker=docker)
+    env = ToolEnv(docker=docker)
+    env.add(test)
     env.save()
     url = env.url
     del env

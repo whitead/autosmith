@@ -1,5 +1,8 @@
 import os
 import pickle
+import tempfile
+import time
+import urllib.request
 from pathlib import Path
 from typing import Callable, Dict, Optional, Union
 
@@ -8,6 +11,13 @@ from pydantic import BaseModel, Field, PrivateAttr, validator
 
 from .docker import Docker
 from .version import __version__
+from pathlib import Path
+from typing import Optional
+
+from .docker import Docker
+from .template import render_container, render_requirements, render_server
+
+
 
 Function = Union[str, Callable]
 
@@ -35,7 +45,7 @@ class EncodedTool(BaseModel):
 class ToolEnv(BaseModel):
     """ToolEnv is the environment for a set of tools"""
 
-    requirements: str
+    requirements: str = ""
     name: str = "tool-environment"
     version: str = __version__
     host: str = "127.0.0.1"
@@ -68,6 +78,7 @@ class ToolEnv(BaseModel):
             self.docker.remove_container(cid)
 
     def __enter__(self):
+        self.start()
         return self
 
     def __exit__(self, exc_type, exc_value, traceback):
@@ -94,3 +105,41 @@ class ToolEnv(BaseModel):
             o = pickle.load(f)
         o._saved = False
         return o
+
+    def start(self):
+        if self.container_id is not None:
+            self.docker.remove_container(self.container_id)
+        self.docker.run_container(self.name, self.port)
+
+    def add(
+            self,
+        func: Function
+    ):
+        """Adds func to given env (or creates new one)"""
+        if self.container_id is not None:
+            self.docker.remove_container(self.container_id)
+
+        self.docker.remove_image(self.name)
+        # create directory for temp files
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            with open(os.path.join(tmpdirname, "Dockerfile"), "w") as f:
+                f.write(render_container(self))
+            with open(os.path.join(tmpdirname, "main.py"), "w") as f:
+                f.write(render_server(func, tool_env=self))
+            with open(os.path.join(tmpdirname, "requirements.txt"), "w") as f:
+                f.write(render_requirements(self))
+            self.docker.build_image(self.name, Path(tmpdirname))
+            self.container_id = self.docker.run_container(self.name, self.port)
+
+        success = bool(self.docker.mock)
+        for _ in range(10):
+            if success:
+                break
+            try:
+                urllib.request.urlopen(f"{self.url}/docs")
+                success = True
+            except Exception:
+                time.sleep(0.5)
+        if not success:
+            raise ValueError("Could not connect to server")
+
