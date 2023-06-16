@@ -35,4 +35,4 @@ jobs:
         OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
       run: |
          pytest tests
-      uses: actions/hello-world-docker-action@v2
+      uses: papodaca/install-docker-action@main
