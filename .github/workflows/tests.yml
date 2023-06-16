@@ -21,8 +21,6 @@ jobs:
       uses: actions/setup-python@v2
       with:
         python-version: ${{ matrix.python-version }}
-    - name: Install docker
-      uses: papodaca/install-docker-action@main
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
@@ -37,3 +35,4 @@ jobs:
         OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
       run: |
          pytest tests
+      uses: actions/hello-world-docker-action@v2
