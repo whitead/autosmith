@@ -7,8 +7,8 @@ from typing import Callable, Optional, Union, cast
 from jinja2 import Environment, PackageLoader
 from pydantic import BaseModel, create_model
 
-from .env import consistent_requirements, get_requirements
-from .types import EncodedTool, ToolEnv
+from .env import EncodedTool, ToolEnv
+from .func import consistent_requirements, get_requirements
 
 
 def make_schema(func: Callable) -> BaseModel:

@@ -3,6 +3,7 @@ import ast
 import pytest
 from pydantic import BaseModel
 
+from autosmith.env import ToolEnv
 from autosmith.template import (
     func_to_url,
     get_func_description,
@@ -11,7 +12,6 @@ from autosmith.template import (
     render_container,
     render_server,
 )
-from autosmith.types import ToolEnv
 
 
 def is_valid_python(code):

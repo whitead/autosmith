@@ -1,21 +1,30 @@
 import os
-import subprocess
 import tempfile
 import time
 import urllib.request
+from pathlib import Path
 from typing import Optional
 
-from .env import get_requirements
+from .docker import Docker
+from .env import Function, ToolEnv
+from .func import get_requirements
 from .template import render_container, render_requirements, render_server
-from .types import Function, ToolEnv
 
 
-def smith(func: Function, env: Optional[ToolEnv] = None) -> ToolEnv:
+def smith(
+    func: Function, env: Optional[ToolEnv] = None, docker: Optional[Docker] = None
+) -> ToolEnv:
     """Adds func to given env (or creates new one)"""
     if env is None:
-        env = ToolEnv(requirements=get_requirements(func))
+        env = ToolEnv(requirements=get_requirements(func), docker=docker)
+    if docker is None:
+        docker = Docker()
     if env.container_id is not None:
-        subprocess.run(["docker", "kill", env.container_id])
+        docker.kill_container(env.container_id)
+
+    # TODO: this logic should probably be in env
+
+    docker.remove_image(env.title)
     # create directory for temp files
     with tempfile.TemporaryDirectory() as tmpdirname:
         with open(os.path.join(tmpdirname, "Dockerfile"), "w") as f:
@@ -24,37 +33,16 @@ def smith(func: Function, env: Optional[ToolEnv] = None) -> ToolEnv:
             f.write(render_server(func, tool_env=env))
         with open(os.path.join(tmpdirname, "requirements.txt"), "w") as f:
             f.write(render_requirements(env))
-        # remove old containers with same image name
-        output = subprocess.run(
-            ["docker", "ps", "-a", "-q", "--filter", f"ancestor={env.title}"],
-            capture_output=True,
-        )
-        if output.returncode != 0:
-            raise ValueError("Docker ps failed")
-        for cid in output.stdout.decode("utf-8").splitlines():
-            print("found these containers", cid)
-            subprocess.run(["docker", "rm", "-f", cid])
+        docker.build_image(env.title, Path(tmpdirname))
+        env.container_id = docker.run_container(env.title, env.port)
 
-        # remove old images
-        subprocess.run(["docker", "rmi", env.title])
-        # build docker image
-        output = subprocess.run(["docker", "build", "-t", env.title, tmpdirname])
-        if output.returncode != 0:
-            raise ValueError("Docker build failed")
-        output = subprocess.run(
-            ["docker", "run", "-d", "-p", f"{env.port}:8080", env.title],
-            capture_output=True,
-        )
-        if output.returncode != 0:
-            raise ValueError("Docker run failed")
-        env.container_id = output.stdout.decode("utf-8").strip()
-
-    success = False
+    success = bool(docker.mock)
     for _ in range(10):
+        if success:
+            break
         try:
             urllib.request.urlopen(f"http://localhost:{env.port}/docs")
             success = True
-            break
         except Exception as e:
             print(e)
             time.sleep(0.5)

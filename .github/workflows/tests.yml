@@ -21,9 +21,6 @@ jobs:
       uses: actions/setup-python@v2
       with:
         python-version: ${{ matrix.python-version }}
-    - name: Set up docker
-      uses: papodaca/install-docker-action@main
-      run: sudo apt-get update
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
