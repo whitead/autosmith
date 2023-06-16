@@ -1,5 +1,3 @@
-import time
-
 import requests
 
 from autosmith.docker import Docker
@@ -43,7 +41,7 @@ def test_smith():
     assert env.container_id is not None
 
     if not docker.mock:
-        r = requests.get(f"{env.url}test2")
+        r = requests.get(f"{env.url}/test2")
         assert r.status_code == 200
         assert r.text == '"Goodbye world"'
 
@@ -84,7 +82,6 @@ def test_persist_containers():
         assert r.status_code == 200
         assert r.text.startswith('"hello world: ')
     cid = env2.container_id
-    del env2
+    env2.close()
 
-    time.sleep(1)
     assert not docker.is_running(cid) or docker.mock
