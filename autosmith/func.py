@@ -2,12 +2,14 @@ import ast
 import inspect
 import sys
 import textwrap
-from typing import Callable, Dict, List, Mapping, Set, Tuple, cast
+import warnings
+from typing import Callable, Dict, List, Mapping, Set, Tuple, Union, cast
 
 import importlib_metadata
 from packaging.requirements import Requirement
+from pydantic import BaseModel, create_model
 
-from .env import Function
+Function = Union[str, Callable]
 
 
 def _parse_requirements(requirements: str) -> Set[Requirement]:
@@ -109,3 +111,61 @@ def get_requirements(func: Function) -> str:
     func_imports = get_func_imports(func)
     func_requirements = get_requirements_from_imports(func_imports)
     return func_requirements
+
+
+def get_func_name(func: Union[Callable, str]) -> str:
+    """Get the name of a function"""
+    if callable(func):
+        return func.__name__
+
+    source: str = textwrap.dedent(cast(str, func))
+    source_node: ast.AST = ast.parse(source)
+    for n in ast.walk(source_node):
+        if isinstance(n, ast.FunctionDef):
+            return n.name
+    raise ValueError("Could not find function name")
+
+
+def get_func_description(func: Union[Callable, str]) -> str:
+    """Get the description of a function"""
+    if callable(func):
+        return func.__doc__ if func.__doc__ else ""
+
+    source: str = textwrap.dedent(cast(str, func))
+    source_node: ast.AST = ast.parse(source)
+    for n in ast.walk(source_node):
+        if isinstance(n, ast.FunctionDef):
+            ds = ast.get_docstring(n)
+            if ds is None:
+                return ""
+            return str(ds)
+    raise ValueError("Could not find function description")
+
+
+def func_to_url(name: str) -> str:
+    return name.replace("_", "-")
+
+
+def make_schema(func: Callable) -> BaseModel:
+    """Make a schema from a function"""
+    name = func.__name__
+    desc = func.__doc__
+    if desc is None:
+        raise ValueError("Function must have a docstring if inferring schema")
+    properties = {}
+    for arg in func.__code__.co_varnames[: func.__code__.co_argcount]:
+        # use default values
+        if func.__defaults__ and arg in func.__defaults__:
+            properties[arg] = func.__defaults__[func.__code__.co_varnames.index(arg)]
+        # use type hints (no elif - intentional
+        if arg in func.__annotations__:
+            if arg in properties:
+                properties[arg] = (func.__annotations__[arg], properties[arg])
+            else:
+                properties[arg] = (func.__annotations__[arg], ...)
+        # use str as default (or rely on type inference from default)
+        else:
+            properties[arg] = (str, ...)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        return create_model(name.capitalize(), **properties, __doc__=desc)

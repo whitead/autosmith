@@ -20,7 +20,7 @@ def test_env_add():
     docker = Docker(mock=None)
 
     env = ToolEnv(docker=docker)
-    env.add(test)
+    env.add_tool(test)
     assert env.container_id is not None
     assert "numpy" in env.requirements
     assert "test" in env.tools
@@ -37,7 +37,7 @@ def test_env_add():
         """Test function 2"""
         return "Goodbye world"
 
-    env = env.add(test2)
+    env.add_tool(test2)
     assert env.container_id is not None
 
     if not docker.mock:
@@ -67,7 +67,7 @@ def test_persist_containers():
 
     docker = Docker(mock=None)
     env = ToolEnv(docker=docker)
-    env.add(test)
+    env.add_tool(test)
     env.save()
     url = env.url
     del env

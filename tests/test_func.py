@@ -2,12 +2,17 @@ from math import *  # noqa
 
 import pytest
 from numpy import arange
+from pydantic import BaseModel
 
 from autosmith.func import (
     consistent_requirements,
+    func_to_url,
+    get_func_description,
     get_func_imports,
+    get_func_name,
     get_imports,
     get_requirements_from_imports,
+    make_schema,
     merge_requirements,
 )
 
@@ -130,3 +135,70 @@ def test_merge_requirements():
     """
 
     assert consistent_requirements(env + "\nrdkit", merge_requirements(env, proposed))
+
+
+def test_make_schema():
+    def func(a: int, b: float) -> int:
+        """Add a and b"""
+        return int(a + b)
+
+    class Func(BaseModel):
+        """Add a and b"""
+
+        a: int
+        b: float
+
+    schema = make_schema(func)
+    assert schema.schema() == Func.schema()
+
+
+def test_make_schema_imports():
+    def func(a: int, b: float) -> int:
+        """Add a and b"""
+        return int(a + b)
+
+    class Func(BaseModel):
+        """Add a and b"""
+
+        a: int
+        b: float
+
+    schema = make_schema(func)
+    print(schema.schema())
+    assert schema.schema() == Func.schema()
+
+
+def test_empty_schema():
+    """Test with callable function and make sure schema is empty"""
+
+    def func() -> str:
+        """print hello world"""
+        return "hello world"
+
+    class Func(BaseModel):
+        """print hello world"""
+
+        pass
+
+    schema = make_schema(func)
+    assert schema.schema() == Func.schema()
+
+
+def test_get_func_name():
+    def func(a: int, b: float) -> int:
+        """Add a and b"""
+        return int(a + b)
+
+    assert get_func_name(func) == "func"
+
+
+def test_get_func_description():
+    def func(a: int, b: float) -> int:
+        """Add a and b"""
+        return int(a + b)
+
+    assert get_func_description(func) == "Add a and b"
+
+
+def test_func_to_url():
+    assert func_to_url("foo_bar") == "foo-bar"

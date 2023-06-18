@@ -1,25 +1,30 @@
+import inspect
+import json
 import os
 import pickle
 import tempfile
+import textwrap
 import time
 import urllib.request
 from pathlib import Path
-from typing import Callable, Dict, Optional, Union
+from typing import Callable, Dict, Optional, Union, cast
 
 import pkg_resources
+from datamodel_code_generator.parser.jsonschema import JsonSchemaParser
+from jinja2 import Environment, PackageLoader
 from pydantic import BaseModel, Field, PrivateAttr, validator
 
 from .docker import Docker
+from .func import (
+    consistent_requirements,
+    func_to_url,
+    get_func_description,
+    get_func_name,
+    get_requirements,
+    make_schema,
+    merge_requirements,
+)
 from .version import __version__
-from pathlib import Path
-from typing import Optional
-
-from .docker import Docker
-from .template import render_container, render_requirements, render_server
-
-
-
-Function = Union[str, Callable]
 
 
 class EncodedTool(BaseModel):
@@ -109,11 +114,10 @@ class ToolEnv(BaseModel):
     def start(self):
         if self.container_id is not None:
             self.docker.remove_container(self.container_id)
-        self.docker.run_container(self.name, self.port)
+        self.container_id = self.docker.run_container(self.name, self.port)
 
-    def add(
-            self,
-        func: Function
+    def build(
+        self,
     ):
         """Adds func to given env (or creates new one)"""
         if self.container_id is not None:
@@ -123,11 +127,11 @@ class ToolEnv(BaseModel):
         # create directory for temp files
         with tempfile.TemporaryDirectory() as tmpdirname:
             with open(os.path.join(tmpdirname, "Dockerfile"), "w") as f:
-                f.write(render_container(self))
+                f.write(self.render_container())
             with open(os.path.join(tmpdirname, "main.py"), "w") as f:
-                f.write(render_server(func, tool_env=self))
+                f.write(self.render_server())
             with open(os.path.join(tmpdirname, "requirements.txt"), "w") as f:
-                f.write(render_requirements(self))
+                f.write(self.render_requirements())
             self.docker.build_image(self.name, Path(tmpdirname))
             self.container_id = self.docker.run_container(self.name, self.port)
 
@@ -143,3 +147,78 @@ class ToolEnv(BaseModel):
         if not success:
             raise ValueError("Could not connect to server")
 
+    def add_tool(
+        self,
+        func: Union[Callable, str],
+        schema: Optional[Union[BaseModel, str]] = None,
+    ):
+        """Stamp a function with a schema and tool environment"""
+        if isinstance(func, str) and schema is None:
+            raise ValueError("Must provide schema if func is a string")
+        raw_schema: Optional[str] = None
+        schema_title: str = ""
+        if schema is None:
+            schema = make_schema(cast(Callable, func))
+        if not isinstance(schema, str):
+            schema_title = schema.__name__
+            parser = JsonSchemaParser(schema.schema_json())
+            parser.parse_raw()
+            raw_schema = parser.results[0].render()
+        else:
+            schema = cast(str, schema)
+            # check if schema is valid json
+            try:
+                schema_title = json.loads(schema)["title"]
+                parser = JsonSchemaParser(schema)
+                parser.parse_raw()
+                raw_schema = parser.results[0].render()
+            except json.JSONDecodeError:
+                # if not, assume it's python code
+                raw_schema = textwrap.dedent(schema)
+                schema_title = (
+                    raw_schema.split("(BaseModel):")[0].split("class ")[1].strip()
+                )
+
+        func_requirements = get_requirements(func)
+
+        if not consistent_requirements(self.requirements, func_requirements):
+            self.requirements = merge_requirements(self.requirements, func_requirements)
+
+        if not consistent_requirements(self.requirements, func_requirements):
+            raise ValueError("Cannot make requirements consistent")
+
+        if callable(func):
+            source = textwrap.dedent(inspect.getsource(func))
+        else:
+            source = textwrap.dedent(func)
+
+        # convert schema and func to tool
+        tool = EncodedTool(
+            function=source,
+            function_name=get_func_name(func),
+            description=get_func_description(func),
+            input_class_name=schema_title,
+            input_class_raw_schema=raw_schema,
+        )
+
+        # add tool to tool_env
+        self.tools[func_to_url(tool.function_name)] = tool
+        self.build()
+
+    def render_server(self) -> str:
+        # render tool_env
+        jinja_env = Environment(loader=PackageLoader("autosmith", "templates"))
+        template = jinja_env.get_template("main.py.jinja")
+        return template.render(env=self)
+
+    def render_container(self) -> str:
+        """template a container with a tool environment"""
+        env = Environment(loader=PackageLoader("autosmith", "templates"))
+        template = env.get_template("Dockerfile.jinja")
+        return template.render(env=self)
+
+    def render_requirements(self) -> str:
+        """Render requirements.txt from tool_env"""
+        env = Environment(loader=PackageLoader("autosmith", "templates"))
+        template = env.get_template("requirements.txt.jinja")
+        return template.render(env=self)
